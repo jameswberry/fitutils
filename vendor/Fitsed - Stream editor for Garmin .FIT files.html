@@ -1,0 +1,347 @@
+
+<!-- saved from url=(0048)https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>Fitsed - Stream editor for Garmin .FIT files</title>
+<link rev="made" href="mailto:kojima@linet.gr.jp">
+</head>
+
+<body style="">
+
+<a name="__index__"></a>
+<!-- INDEX BEGIN -->
+
+<ul>
+
+	<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#name">NAME</a></li>
+	<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#synopsis">SYNOPSIS</a></li>
+	<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#description">DESCRIPTION</a></li>
+	<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#expression">EXPRESSION</a></li>
+	<ul>
+
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#single expression">Single expression</a></li>
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#compound expression">Compound expression</a></li>
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#special variables">Special variables</a></li>
+	</ul>
+
+	<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#typical story">TYPICAL STORY</a></li>
+	<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#exaples">EXAPLES</a></li>
+	<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#author">AUTHOR</a></li>
+	<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#disclaimer etc.">DISCLAIMER etc.</a></li>
+	<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#changes">CHANGES</a></li>
+	<ul>
+
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#0.08 &gt; 0.09">0.08 -&gt; 0.09</a></li>
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#0.07 &gt; 0.08">0.07 -&gt; 0.08</a></li>
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#0.06 &gt; 0.07">0.06 -&gt; 0.07</a></li>
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#0.05 &gt; 0.06">0.05 -&gt; 0.06</a></li>
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#0.04 &gt; 0.05">0.04 -&gt; 0.05</a></li>
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#0.03 &gt; 0.04">0.03 -&gt; 0.04</a></li>
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#0.02 &gt; 0.03">0.02 -&gt; 0.03</a></li>
+		<li><a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#0.01 &gt; 0.02">0.01 -&gt; 0.02</a></li>
+	</ul>
+
+</ul>
+<!-- INDEX END -->
+
+<hr>
+<p>
+</p><h1><a name="name">NAME</a></h1>
+<p>Fitsed - Stream editor for Garmin .FIT files</p>
+<p>
+</p><hr>
+<h1><a name="synopsis">SYNOPSIS</a></h1>
+<pre>  fitsed -show_version=1
+  fitsed [-parser_dump_indent=&lt;number&gt;] -parser_dump=1 &lt;expression&gt;
+  fitsed &lt;expression&gt; [&lt;input_file1&gt; [&lt;input_file2&gt; ...] [&lt;output file&gt;]]</pre>
+<p>
+</p><hr>
+<h1><a name="description">DESCRIPTION</a></h1>
+<p><strong>Fitsed</strong> reads the contents of Garmin .FIT files,
+assigns specified values to specified fields of specified data messages,
+and outputs them with appropriate .FIT header and trailing CRC-16.</p>
+The latest version is obtained via<blockquote><a href="https://pub.ks-and-ks.ne.jp/cycling/pub/fitsed-0.09.tar.gz">fitsed-0.09.tar.gz</a> (8KB, 2017-06-18 14:36:07).</blockquote><p>It uses a Perl class</p>
+<blockquote><a href="https://pub.ks-and-ks.ne.jp/cycling/GarminFIT.shtml"><p><code>Garmin::FIT</code></p>
+</a></blockquote><p>of version 0.27 or later.</p>
+<p>
+</p><hr>
+<h1><a name="expression">EXPRESSION</a></h1>
+<p>Each time when a data message is read,
+<em>&lt;expression</em>&gt; is evaluated.
+<em>&lt;expression</em>&gt; is <em>&lt;single expression</em>&gt; or <em>&lt;compound expression</em>&gt;.
+All syntactical keywords and operators in explanations below are case-insensitive.</p>
+<p>
+</p><h2><a name="single expression">Single expression</a></h2>
+<p>A single expression must be one of the following forms.</p>
+<dl>
+<dt><strong><a name="item_%3Cplace_spec%3E%3Cassignment_or_comparison%3E%3Cv"><em>&lt;place spec</em>&gt;<em>&lt;assignment or comparison</em>&gt;<em>&lt;value</em>&gt;</a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%3Cplace_spec%3E%2B"><em>&lt;place spec</em>&gt;<code>+</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%3Cplace_spec%3E%2D"><em>&lt;place spec</em>&gt;<code>-</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%3Ca_Perl_expression%3E"><em>&lt;a Perl expression</em>&gt;</a></strong><br>
+</dt><dd>
+</dd></dl>
+<p><em>&lt;place spec</em>&gt; must be one of the following forms.</p>
+<dl>
+<dt><strong><a name="item_%3Cmessage_spec%3E%2E%3Cfield_spec%3E"><em>&lt;message spec</em>&gt;<code>.</code><em>&lt;field spec</em>&gt;</a></strong><br>
+</dt><dd>
+<em>&lt;message spec</em>&gt; is a name or a number of a .FIT message,
+and <em>&lt;field spec</em>&gt; is a name or a index of a filed of the message,
+in a global .FTI profile.
+<p></p>
+</dd><dt><strong><a name="item__n%2E%3Cname%3E"><code>_n</code><code>.</code><em>&lt;name</em>&gt;</a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item__s%2E%3Cname%3E"><code>_s</code><code>.</code><em>&lt;name</em>&gt;</a></strong><br>
+</dt><dd>
+<code>_n.</code><em>&lt;name</em>&gt; and <code>_s.</code><em>&lt;name</em>&gt; represent global variables named <em>&lt;name</em>&gt;.
+The value of <code>_n.</code><em>&lt;name</em>&gt; is treated as a number,
+and the value of <code>_s.</code><em>&lt;name</em>&gt; is treated as a string.
+<p></p></dd></dl>
+<p><em>&lt;message spec</em>&gt;<code>.</code>, <code>_n.</code>, or <code>_s.</code> can be omitted.
+In that case,
+the last refered one is assumed.</p>
+<p><em>&lt;assignment or comparison</em>&gt; must be one of <a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#item_%3D"><code>=</code></a>, <a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#item_%3Alt%3A"><code>:lt:</code></a>, <a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#item_%3Ale%3A"><code>:le:</code></a>, <a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#item_%3Aeq%3A"><code>:eq:</code></a>, <a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#item_%3Age%3A"><code>:ge:</code></a>, <a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#item_%3Agt%3A"><code>:gt:</code></a>, or <a href="https://pub.ks-and-ks.ne.jp/cycling/fitsed.shtml#item_%3A%3A"><code>::</code></a>.</p>
+<dl>
+<dt><strong><a name="item_%3D"><code>=</code></a></strong><br>
+</dt><dd>
+It assigns <em>&lt;value</em>&gt; to the specified place.
+It is evaluated to a true value.
+<p>An array value is expressed as a comma separated list of members enclosed with open and closing braces.</p>
+<p></p>
+</dd><dt><strong><a name="item_%3Alt%3A"><code>:lt:</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%3Ale%3A"><code>:le:</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%3Aeq%3A"><code>:eq:</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%3Age%3A"><code>:ge:</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%3Agt%3A"><code>:gt:</code></a></strong><br>
+</dt><dd>
+They stand for <em>less than</em>, <em>less than or equal to</em>, <em>equal to</em>, <em>greater than or equal to</em>, and <em>greater than</em>, respectively.
+They compare the value of the specified place against <em>&lt;value</em>&gt;.
+<p></p>
+</dd><dt><strong><a name="item_%3A%3A"><code>::</code></a></strong><br>
+</dt><dd>
+It matches <em>&lt;value</em>&gt; as a regular expression against the value of the specified place.
+<p></p></dd></dl>
+<p>The evaluation engine has two data stack.
+One is for numeric values,
+and the other is for string values.</p>
+<p><code>+</code> pushs the value of <em>&lt;place spec</em>&gt; to one of the stacks.
+<code>-</code> pops a value from one of the stacks,
+and assigns the value to <em>&lt;place spec</em>&gt;.
+Which of stacks is selected is determined by data type of <em>&lt;place spec</em>&gt;.
+Both operations are evaluated to a true value.</p>
+<p><em>&lt;a Perl expression</em>&gt; is evaluated to a true value if and only if it is a true value as a Perl expression.</p>
+<p>
+</p><h2><a name="compound expression">Compound expression</a></h2>
+<p>A compound expression must be one of the following form.</p>
+<dl>
+<dt><strong><a name="item_%21_%3Cexpression%3E"><code>!</code> <em>&lt;expression</em>&gt;</a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_not_%3Cexpression%3E"><code>not</code> <em>&lt;expression</em>&gt;</a></strong><br>
+</dt><dd>
+Each of them evaluates to a true or false value if <em>&lt;expression</em>&gt; evaluates to a false or true value, respectively.
+<p></p>
+</dd><dt><strong><a name="item_%28_%3Csequence_of_expressions%3E_%29"><code>(</code> <em>&lt;sequence of expressions</em>&gt; <code>)</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%5B_%3Csequence_of_expressions%3E_%5D"><code>[</code> <em>&lt;sequence of expressions</em>&gt; <code>]</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%3C_%3Csequence_of_expressions%3E_%3E"><code>&lt;</code> <em>&lt;sequence of expressions</em>&gt; <code>&gt;</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_%7B_%3Csequence_of_expressions%3E_%7D"><code>{</code> <em>&lt;sequence of expressions</em>&gt; <code>}</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_b_%3Csequence_of_expressions%3E_e"><code>b</code> <em>&lt;sequence of expressions</em>&gt; <code>e</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_beg_%3Csequence_of_expressions%3E_end"><code>beg</code> <em>&lt;sequence of expressions</em>&gt; <code>end</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_begin_%3Csequence_of_expressions%3E_end"><code>begin</code> <em>&lt;sequence of expressions</em>&gt; <code>end</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_beginning_%3Csequence_of_expressions%3E_end"><code>beginning</code> <em>&lt;sequence of expressions</em>&gt; <code>end</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_start_%3Csequence_of_expressions%3E_end"><code>start</code> <em>&lt;sequence of expressions</em>&gt; <code>end</code></a></strong><br>
+</dt><dd>
+</dd><dt><strong><a name="item_do_%3Csequence_of_expressions%3E_done"><code>do</code> <em>&lt;sequence of expressions</em>&gt; <code>done</code></a></strong><br>
+</dt><dd>
+<em>&lt;sequence of expressions</em>&gt; is <em>&lt;and sequence</em>&gt; or <em>&lt;or sequence</em>&gt;,
+and evaluated with the following rule.
+The result of the evaluation becomes the value of the compound expression.
+<p><em>&lt;and sequence</em>&gt; is simply a sequence of any number of <em>&lt;expression</em>&gt;'s.
+They are evaluated in order.
+Evaluation stops when an <em>&lt;expression</em>&gt; evaluates to a false value,
+and the false value becomes the value of the whole sequence.</p>
+<p>If all <em>&lt;expression</em>&gt;'s evaluate to true values,
+this <em>&lt;and sequence</em>&gt; evaluates to a true value.</p>
+<dl>
+<dt><strong><a name="item_%3Cor_sequence%3E_is_a_sequence_of_the_form%3A"><em>&lt;or sequence</em>&gt; is a sequence of the form:</a></strong><br>
+</dt><dd>
+<em>&lt;and sequence</em>&gt; <code>or</code> <em>&lt;sequence of expressions</em>&gt;.
+<p></p></dd></dl>
+<p>First the left <em>&lt;and sequence</em>&gt; is evaluated.
+If the evaluation generates a true value,
+the value becomes the value of this <em>&lt;or sequence</em>&gt;.
+In this case the right <em>&lt;sequence of expression</em>&gt; is not evaluated.</p>
+<p>If the evaluation generates a false value,
+the right <em>&lt;sequence of expression</em>&gt; is evaluated,
+and the result becomes the value of this <em>&lt;or sequence</em>&gt;.</p>
+</dd></dl>
+<p>
+</p><h2><a name="special variables">Special variables</a></h2>
+<p>The following variables have special meaning.</p>
+<dl>
+<dt><strong><a name="item__n%2E_stop"><code>_n._stop</code></a></strong><br>
+</dt><dd>
+If this variable has a non-zero value after the expression given on the command line is evaluated,
+all succeeding evaluations of the expression and outputs of .FIT messages are skipped.
+<p></p>
+</dd><dt><strong><a name="item__n%2E_skip"><code>_n._skip</code></a></strong><br>
+</dt><dd>
+If this variable has a non-zero value after the expression given on the command line is evaluated,
+the corresponding .FIT message is not output.
+The value is changed to 0 before the next evaluation.
+<p></p>
+</dd><dt><strong><a name="item__n%2E_global_message_type"><code>_n._global_message_type</code></a></strong><br>
+</dt><dd>
+assigned with the message number in a global .FIT profile of the corresponding .FIT message
+during evaluation.
+<p></p>
+</dd><dt><strong><a name="item__s%2E_global_message_type"><code>_s._global_message_type</code></a></strong><br>
+</dt><dd>
+assigned with the message name in a global .FIT profile of the corresponding .FIT message or an empty string
+during evaluation.
+<p></p>
+</dd><dt><strong><a name="item__n%2E_local_message_type"><code>_n._local_message_type</code></a></strong><br>
+</dt><dd>
+assigned with the local message number of the corresponding .FIT message
+during evaluation.
+<p></p></dd></dl>
+<p>All other global variables with names starting with <code>_</code> (underscore) are reserved for special purpose.</p>
+<p>
+</p><hr>
+<h1><a name="typical story">TYPICAL STORY</a></h1>
+<p>If you want to modify a .FIT file (say <em>originalfile.fit</em>),
+you can first look at the contents of the file with</p>
+<blockquote><a href="https://pub.ks-and-ks.ne.jp/cycling/fitdump.shtml"><p><code>fitdump</code></p>
+</a></blockquote><p>of version 0.3 or later.
+It shows messages with message numbers and fields with field indices defined in a global .FIT profile.</p>
+<dl>
+<dt><strong><a name="item_index">If you find the message number and the field index (say <em>&lt;M</em>&gt; and <em>&lt;I</em>&gt;, respectively) of data which you want to change,
+you can call <code>fitsed</code> like</a></strong><br>
+</dt><dd>
+<code>fitsed</code> <em>&lt;M</em>&gt;<code>.</code><em>&lt;I</em>&gt;=<em>&lt;new value</em>&gt; <em>originalfile.fit</em> <em>newfile.fit</em>
+<p></p></dd></dl>
+<p>where modified contens are saved to <em>newfile.fit</em>.</p>
+<p>
+</p><hr>
+<h1><a name="exaples">EXAPLES</a></h1>
+<p>Assuming Edge 500 is mounted on the folder <em>/mnt/Edge500</em>,
+it has a file <em>Settings.fit</em> in the folder <em>/mnt/Edge500/Garmin/Settings</em>.</p>
+<dl>
+<dt><strong><a name="item_To_change_the_value_of_the_field_friendly_name_of_">To change the value of the field <code>friendly_name</code> of the message <code>user_profile</code> in <em>Settings.fit</em> to <code>suto</code>,
+and to save the result to <em>/tmp/new_settings.fit</em>:</a></strong><br>
+</dt><dd>
+<code>fitsed</code> <code>user_profile.friendly_name=suto</code> <em>/mnt/Edge500/Garmin/Settings/Settings.fit</em> <em>/tmp/new_settings.fit</em>
+<p></p>
+</dd><dt><strong><a name="item_To_change_the_value_of_the_field_weight_of_the_sam">To change the value of the field <code>weight</code> of the same message to 54kg simultaneously:</a></strong><br>
+</dt><dd>
+<code>fitsed</code> <code>B</code> <code>user_profile.friendly_name=suto</code> <code>weight=54kg</code> <code>E</code> <em>/mnt/Edge500/Garmin/Settings/Settings.fit</em> <em>/tmp/new_settings.fit</em>
+<p></p></dd></dl>
+<p>The file <em>Settings.fit</em> has 3 messages with message number 6.
+They seem to be bike profiles.
+The field with index 254 in a global .FIT profile of a message of this type,
+seems to be an identification number of the message in the file,
+and the field with index 10 seems to be a bike weight.</p>
+<dl>
+<dt><strong><a name="item_Adding_to_the_above_changes%2C_to_change_the_value">Adding to the above changes,
+to change the value of the field with index 10 of the first message to 7.5kg:</a></strong><br>
+</dt><dd>
+<code>fitsed</code> <code>B</code> <code>6.254:eq:0</code> <code>6.10=7.5kg</code> <code>OR</code> <code>user_profile.friendly_name=suto</code> <code>weight=54kg</code> <code>E</code> <em>/mnt/Edge500/Garmin/Settings/Settings.fit</em> <em>/tmp/new_settings.fit</em>
+<p></p></dd></dl>
+<p>
+</p><hr>
+<h1><a name="author">AUTHOR</a></h1>
+<p>Kiyokazu SUTO &lt;<a href="mailto:suto@ks-and-ks.ne.jp">suto@ks-and-ks.ne.jp</a>&gt;</p>
+<p>
+</p><hr>
+<h1><a name="disclaimer etc.">DISCLAIMER etc.</a></h1>
+<p>This program is distributed with
+ABSOLUTELY NO WARRANTY.</p>
+<p>Anyone can use, modify, and re-distibute this program
+without any restriction.</p>
+<p>
+</p><hr>
+<h1><a name="changes">CHANGES</a></h1>
+<p>
+</p><h2><a name="0.08 &gt; 0.09">0.08 --&gt; 0.09</a></h2>
+<dl>
+<dt><strong><a name="item_force_proto_ver1"><code>force_proto_ver1</code></a></strong><br>
+</dt><dd>
+new option to set protocol version 1.00 unless consistency is broken.
+<p>When developer data or 64bit numbers are not used but major part of protocol version is 2,
+protocol version is set to 1.00 if this option is set to true.</p>
+<p>Thanks to analysis by Stefan Heinen.</p>
+<p></p>
+</dd><dt><strong><a name="item_cat_cb"><code>cat_cb()</code></a></strong><br>
+</dt><dd>
+should care the case where there are previously defined callback functions.
+<p></p></dd></dl>
+<p>
+</p><h2><a name="0.07 &gt; 0.08">0.07 --&gt; 0.08</a></h2>
+<dl>
+<dt><strong><a name="item_drop_developer_data"><code>drop_developer_data</code></a></strong><br>
+</dt><dd>
+new option to drop developer data from output for applications which support only FIT 1.0.
+Thanks to report from Stefan Heinen.
+<p></p></dd></dl>
+<p>
+</p><h2><a name="0.06 &gt; 0.07">0.06 --&gt; 0.07</a></h2>
+<p>Description about notation of an array literal is added to this document.
+Thanks to report from Leandro Lind.</p>
+<p>
+</p><h2><a name="0.05 &gt; 0.06">0.05 --&gt; 0.06</a></h2>
+<dl>
+<dt><strong><code>cat_cb()</code></strong><br>
+</dt><dd>
+used an undefined variable <code>$self</code> which should be <code>$obj</code>.
+Thanks to report and fix of this issue by Marcus.
+<p></p></dd></dl>
+<p>
+</p><h2><a name="0.04 &gt; 0.05">0.04 --&gt; 0.05</a></h2>
+<dl>
+<dt><strong><code>cat_cb()</code></strong><br>
+</dt><dd>
+use new method <code>pack_data_message</code> of <code>Garmin::FIT</code>.
+<p></p></dd></dl>
+<p>
+</p><h2><a name="0.03 &gt; 0.04">0.03 --&gt; 0.04</a></h2>
+<dl>
+<dt><strong><a name="item_with_endian"><code>with_endian</code></a></strong><br>
+</dt><dd>
+new option to force specified endianness (-1 =&gt; little endian, 0 =&gt; machine endian, and 1 =&gt; big endian).
+<p></p></dd></dl>
+<p>
+</p><h2><a name="0.02 &gt; 0.03">0.02 --&gt; 0.03</a></h2>
+<dl>
+<dt><strong><a name="item_cat"><code>cat()</code></a></strong><br>
+</dt><dd>
+saves extra octets in the first file header.
+<p></p>
+</dd><dt><strong><a name="item_top_level"><em>top level</em></a></strong><br>
+</dt><dd>
+pass extra octets in the first file header to <code>cat_header()</code>.
+<p></p></dd></dl>
+<p>
+</p><h2><a name="0.01 &gt; 0.02">0.01 --&gt; 0.02</a></h2>
+<dl>
+<dt><strong><code>cat_cb()</code></strong><br>
+</dt><dd>
+special variables are introduced.
+Backward compatibility is broken.
+<p></p></dd></dl>
+
+
+
+
+<span style="border-radius: 3px; text-indent: 20px; width: auto; padding: 0px 4px 0px 0px; text-align: center; font-style: normal; font-variant: normal; font-weight: bold; font-stretch: normal; font-size: 11px; line-height: 20px; font-family: &quot;Helvetica Neue&quot;, Helvetica, sans-serif; color: rgb(255, 255, 255); background: url(&quot;data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iMzBweCIgd2lkdGg9IjMwcHgiIHZpZXdCb3g9Ii0xIC0xIDMxIDMxIj48Zz48cGF0aCBkPSJNMjkuNDQ5LDE0LjY2MiBDMjkuNDQ5LDIyLjcyMiAyMi44NjgsMjkuMjU2IDE0Ljc1LDI5LjI1NiBDNi42MzIsMjkuMjU2IDAuMDUxLDIyLjcyMiAwLjA1MSwxNC42NjIgQzAuMDUxLDYuNjAxIDYuNjMyLDAuMDY3IDE0Ljc1LDAuMDY3IEMyMi44NjgsMC4wNjcgMjkuNDQ5LDYuNjAxIDI5LjQ0OSwxNC42NjIiIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxIj48L3BhdGg+PHBhdGggZD0iTTE0LjczMywxLjY4NiBDNy41MTYsMS42ODYgMS42NjUsNy40OTUgMS42NjUsMTQuNjYyIEMxLjY2NSwyMC4xNTkgNS4xMDksMjQuODU0IDkuOTcsMjYuNzQ0IEM5Ljg1NiwyNS43MTggOS43NTMsMjQuMTQzIDEwLjAxNiwyMy4wMjIgQzEwLjI1MywyMi4wMSAxMS41NDgsMTYuNTcyIDExLjU0OCwxNi41NzIgQzExLjU0OCwxNi41NzIgMTEuMTU3LDE1Ljc5NSAxMS4xNTcsMTQuNjQ2IEMxMS4xNTcsMTIuODQyIDEyLjIxMSwxMS40OTUgMTMuNTIyLDExLjQ5NSBDMTQuNjM3LDExLjQ5NSAxNS4xNzUsMTIuMzI2IDE1LjE3NSwxMy4zMjMgQzE1LjE3NSwxNC40MzYgMTQuNDYyLDE2LjEgMTQuMDkzLDE3LjY0MyBDMTMuNzg1LDE4LjkzNSAxNC43NDUsMTkuOTg4IDE2LjAyOCwxOS45ODggQzE4LjM1MSwxOS45ODggMjAuMTM2LDE3LjU1NiAyMC4xMzYsMTQuMDQ2IEMyMC4xMzYsMTAuOTM5IDE3Ljg4OCw4Ljc2NyAxNC42NzgsOC43NjcgQzEwLjk1OSw4Ljc2NyA4Ljc3NywxMS41MzYgOC43NzcsMTQuMzk4IEM4Ljc3NywxNS41MTMgOS4yMSwxNi43MDkgOS43NDksMTcuMzU5IEM5Ljg1NiwxNy40ODggOS44NzIsMTcuNiA5Ljg0LDE3LjczMSBDOS43NDEsMTguMTQxIDkuNTIsMTkuMDIzIDkuNDc3LDE5LjIwMyBDOS40MiwxOS40NCA5LjI4OCwxOS40OTEgOS4wNCwxOS4zNzYgQzcuNDA4LDE4LjYyMiA2LjM4NywxNi4yNTIgNi4zODcsMTQuMzQ5IEM2LjM4NywxMC4yNTYgOS4zODMsNi40OTcgMTUuMDIyLDYuNDk3IEMxOS41NTUsNi40OTcgMjMuMDc4LDkuNzA1IDIzLjA3OCwxMy45OTEgQzIzLjA3OCwxOC40NjMgMjAuMjM5LDIyLjA2MiAxNi4yOTcsMjIuMDYyIEMxNC45NzMsMjIuMDYyIDEzLjcyOCwyMS4zNzkgMTMuMzAyLDIwLjU3MiBDMTMuMzAyLDIwLjU3MiAxMi42NDcsMjMuMDUgMTIuNDg4LDIzLjY1NyBDMTIuMTkzLDI0Ljc4NCAxMS4zOTYsMjYuMTk2IDEwLjg2MywyNy4wNTggQzEyLjA4NiwyNy40MzQgMTMuMzg2LDI3LjYzNyAxNC43MzMsMjcuNjM3IEMyMS45NSwyNy42MzcgMjcuODAxLDIxLjgyOCAyNy44MDEsMTQuNjYyIEMyNy44MDEsNy40OTUgMjEuOTUsMS42ODYgMTQuNzMzLDEuNjg2IiBmaWxsPSIjYmQwODFjIj48L3BhdGg+PC9nPjwvc3ZnPg==&quot;) 3px 50% / 14px 14px no-repeat rgb(189, 8, 28); position: absolute; opacity: 1; z-index: 8675309; display: none; cursor: pointer; border: none; -webkit-font-smoothing: antialiased;">Save</span><span style="width: 24px; height: 24px; background: url(&quot;data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiA/Pjxzdmcgd2lkdGg9IjI0cHgiIGhlaWdodD0iMjRweCIgdmlld0JveD0iMCAwIDI0IDI0IiB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiPjxkZWZzPjxtYXNrIGlkPSJtIj48cmVjdCBmaWxsPSIjZmZmIiB4PSIwIiB5PSIwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI2IiByeT0iNiIvPjxyZWN0IGZpbGw9IiMwMDAiIHg9IjUiIHk9IjUiIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCIgcng9IjEiIHJ5PSIxIi8+PHJlY3QgZmlsbD0iIzAwMCIgeD0iMTAiIHk9IjAiIHdpZHRoPSI0IiBoZWlnaHQ9IjI0Ii8+PHJlY3QgZmlsbD0iIzAwMCIgeD0iMCIgeT0iMTAiIHdpZHRoPSIyNCIgaGVpZ2h0PSI0Ii8+PC9tYXNrPjwvZGVmcz48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiNmZmYiIG1hc2s9InVybCgjbSkiLz48L3N2Zz4=&quot;) 50% 50% / 14px 14px no-repeat rgba(0, 0, 0, 0.4); position: absolute; opacity: 1; z-index: 8675309; display: none; cursor: pointer; border: none; border-radius: 12px;"></span></body></html>

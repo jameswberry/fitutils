@@ -1,0 +1,1126 @@
+#! /usr/bin/perl -s
+
+use Garmin::FIT;
+
+$parser_dump_indent = 2 if !defined $parser_dump_indent;
+$parser_dump = 0 if !defined $parser_dump;
+$show_version = 0 if !defined $show_version;
+$with_endian = '' if !defined $with_endian;
+$drop_developer_data = 0 if !defined $drop_developer_data;
+$force_proto_ver1 = 0 if !defined $force_proto_ver1;
+
+my $version = 0.09;
+
+if ($show_version) {
+  print $version, "\n";
+  exit;
+}
+
+sub parser_push {
+  my $stack = shift;
+
+  if (@$stack && $stack->[$#$stack] eq '!') {
+    pop @$stack;
+    &parser_push($stack, ['!', $_[0]]);
+  }
+  else {
+    push @$stack, $_[0];
+  }
+}
+
+sub parser_reduction {
+  my ($stack, $by_paren_p) = @_;
+  my $i;
+
+  for ($i = $#$stack ; $i >= 0 ;) {
+    if ($stack->[$i] eq '(') {
+      splice @$stack, $i, 1;
+
+      my $group = ['&', splice(@$stack, $i)];
+
+      &parser_push($stack, $group);
+      last if !$#$stack || $by_paren_p;
+      $i = $#$stack - 1;
+    }
+    elsif ($stack->[$i] eq '|') {
+      splice @$stack, $i, 1;
+
+      my $right = ['&', splice(@$stack, $i)];
+
+      for ($j = $i - 1 ; $j >= 0 ; --$j) {
+	last if $stack->[$j] eq '(' || $stack->[$j] eq '|';
+      }
+
+      my $left = ['&', splice(@$stack, $j + 1)];
+
+      &parser_push($stack, ['|', $left, $right]);
+      $i = $#$stack - 1;
+    }
+    else {
+      --$i;
+    }
+  }
+
+  $stack;
+}
+
+my %paren_beginning =
+  (
+   '(' => ')',
+   '[' => ']',
+   '<' => '>',
+   '{' => '}',
+   'b' => 'e',
+   'beg' => 'end',
+   'begin' => 'end',
+   'beginning' => 'end',
+   'start' => 'end',
+   'do' => 'done',
+   );
+
+my (%paren_end, $end);
+
+do {
+  $paren_end{$end} = 1;
+} while (undef, $end) = each %paren_beginning;
+
+sub parser_parse {
+  my $end_mark = shift;
+
+  $paren_beginning{$end_mark} ne '' and $end_mark = $paren_beginning{$end_mark} if defined $end_mark;
+
+  my (@stack, @error, @beg, $i);
+
+  for ($i = 0 ; @_ ;) {
+    my $expr = shift @_;
+
+    ++$i;
+
+    my $expr_nc = lc($expr);
+
+    if (!@beg && defined $end_mark && $expr_nc eq $end_mark) {
+      last;
+    }
+    elsif ($paren_end{$expr_nc}) {
+      my $found;
+
+      while (@beg) {
+	&parser_reduction(\@stack, 1);
+
+	my ($j, $beg) = splice @beg, -2;
+	my $end = $paren_beginning{$beg};
+
+	if ($end eq $expr_nc) {
+	  $found = 1;
+	  last;
+	}
+
+	push @error, sprintf("\#%d '%s': closed by \#%d '%s'", $j, $beg, $i, $expr_nc);
+      }
+
+      push @error, sprintf("\#%d '%s': not opened", $i, $expr_nc) if !$found;
+    }
+    elsif (defined $paren_beginning{$expr_nc}) {
+      push @beg, $i, $expr_nc;
+      push @stack, '(';
+    }
+    elsif ($expr eq '|' || $expr_nc eq 'or') {
+      push @stack, '|';
+    }
+    elsif ($expr eq '!' || $expr_nc eq 'not') {
+      push @stack, '!';
+    }
+    else {
+      my $code = &lexer($expr);
+
+      if (ref $code eq 'HASH') {
+	&parser_push(\@stack, $code->{op} eq "'" ? $code->{av} : $code);
+      }
+      else {
+	push @error, $code;
+      }
+
+      (defined $end_mark || @beg) or last;
+    }
+  }
+
+  push @error, sprintf("\#%d '%s': not closed", splice(@beg, -2)) while @beg;
+  &parser_reduction(\@stack, 0);
+
+  if (wantarray) {
+    (\@stack, \@error, $i);
+  }
+  else {
+    \@stack;
+  }
+}
+
+my $last_message;
+
+sub lexer_lval {
+  my ($lval, $code) = @_;
+  my ($message, $field) = split /\./, $lval, 2;
+
+  ($message, $field) = ($last_message, $message) if !defined $field;
+
+  if ($message =~ /^_[ns]$/) {
+    $code->{mn} = $message;
+    $code->{fn} = $field;
+  }
+  else {
+    if ($message =~ /^\d+$/) {
+      $code->{mn} = $message;
+    }
+    elsif (!defined($code->{mn} = Garmin::FIT->message_number($message))) {
+      return "$message is not a message name";
+    }
+
+    if ($field =~ /^\d+$/) {
+      $code->{fn} = $field;
+    }
+    elsif (!defined($code->{fn} = Garmin::FIT->field_number($code->{mn}, $field))) {
+      return "$field is not a field name of the message $message";
+    }
+  }
+
+  $last_message = $code->{mn};
+  $code;
+}
+
+sub lexer {
+  my $expr = shift;
+
+  if ($expr =~ /^([0-9A-Za-z_\.]+)(=|:(lt|le|eq|ge|gt):|:)(.*)/) {
+    my ($lval, $op, $arg) = ($1, $2, $4);
+
+    $op =~ s/^:|:$//g;
+
+    my %code =
+      (
+       'op' => $op,
+       'av' => $arg =~ s/^\{(.*)\}/$1/ ? [split /\s*,\s*/, $arg, -1] : $arg,
+       );
+
+    &lexer_lval($lval, \%code);
+  }
+  elsif ($expr =~ /^([0-9A-Za-z_\.]+)([-+])$/) {
+    my %code = ('op' => $2);
+
+    &lexer_lval($1, \%code);
+  }
+  else {
+    +{'op' => "'", 'av' => $expr};
+  }
+}
+
+sub parser_dump {
+  my ($code, $n, $FH) = @_;
+
+  $FH = \*STDERR if !defined $FH;
+
+  if (ref $code eq 'ARRAY') {
+    $FH->print(" " x ($parser_dump_indent * $n), "[\n");
+
+    my $i;
+
+    for ($i = 0 ; $i < @$code ; ++$i) {
+      &parser_dump($code->[$i], $n + 1, $FH);
+    }
+
+    $FH->print(" " x ($parser_dump_indent * $n), "]\n");
+  }
+  elsif (ref $code eq 'HASH') {
+    $FH->print(" " x ($parser_dump_indent * $n), "{op => '", $code->{op}, "'");
+    $FH->print(", mn => ", $code->{mn}) if exists $code->{mn};
+    $FH->print(", fn => ", $code->{fn}) if exists $code->{fn};
+
+    if (exists $code->{av}) {
+      $FH->print(", av => ");
+
+      if (ref $code->{av} eq 'ARRAY') {
+	if (@{$code->{av}}) {
+	  $FH->print("['");
+	  {local $, = "', '" ; $FH->print(@{$code->{av}});}
+	  $FH->print("']");
+	}
+	else {
+	  $FH->print('[]');
+	}
+      }
+      else {
+	$FH->print("'", $code->{av}, "'");
+      }
+    }
+
+    $FH->print("}\n");
+  }
+  else {
+    $FH->print(" " x ($parser_dump_indent * $n), $code, "\n");
+  }
+}
+
+my (%numvar, @numstack, %strvar, @strstack);
+
+sub eval_expr {
+  my ($obj, $desc, $v, $code) = @_;
+
+  if (ref $code eq 'ARRAY') {
+    if (@$code) {
+      my $res = 1;
+      my $i;
+
+      if ($code->[0] eq '|') {
+	for ($i = 1 ; $i < @$code ; ++$i) {
+	  if ($code->[$i] eq '!') {
+	    $res = !$res;
+	  }
+	  elsif (&eval_expr($obj, $desc, $v, $code->[$i])) {
+	    return $res;
+	  }
+	}
+
+	!$res;
+      }
+      else {
+	for ($i = $code->[0] eq '&' ? 1 : 0 ; $i < @$code ; ++$i) {
+	  if ($code->[$i] eq '!') {
+	    $res = !$res;
+	  }
+	  elsif (!&eval_expr($obj, $desc, $v, $code->[$i])) {
+	    return !$res;
+	  }
+	}
+
+	$res;
+      }
+    }
+    else {
+      1;
+    }
+  }
+  elsif (ref $code eq 'HASH') {
+    my $av = $code->{av};
+    my $op = $code->{op};
+    my $fn = $code->{fn};
+
+    if ($code->{mn} eq '_n') {
+      if ($op eq '+') {
+	push @numstack, $numvar{$fn};
+	1;
+      }
+      elsif ($op eq '-') {
+	$numvar{$fn} = pop @numstack;
+	1;
+      }
+      elsif ($op eq '=') {
+	$numvar{$fn} = $av;
+	1;
+      }
+      elsif ($op !~ /^(lt|le|eq|ge|gt)$/) {
+	$av = pack('C*', @$av) if ref $av eq 'ARRAY';
+	$code->{ic} ? $numvar{$fn} =~ /$av/i : $numvar{$fn} =~ /$av/;
+      }
+      else {
+	$av = $av->[0] if ref $av eq 'ARRAY';
+
+	my $val = $numvar{$fn};
+
+	$val = $val->[0] if ref $val eq 'ARRAY';
+
+	if ($op eq 'lt') {
+	  $val < $av;
+	}
+	elsif ($op eq 'le') {
+	  $val <= $av;
+	}
+	elsif ($op eq 'ge') {
+	  $val >= $av;
+	}
+	elsif ($op eq 'gt') {
+	  $val > $av;
+	}
+	else {
+	  $val == $av;
+	}
+      }
+    }
+    elsif ($code->{mn} eq '_s') {
+      if ($op eq '+') {
+	push @strstack, $strvar{$fn};
+	1;
+      }
+      elsif ($op eq '-') {
+	$strvar{$fn} = pop @strstack;
+	1;
+      }
+      elsif ($op eq '=') {
+	$strvar{$fn} = $av;
+	1;
+      }
+      elsif ($op !~ /^(lt|le|eq|ge|gt)$/) {
+	$av = pack('C*', @$av) if ref $av eq 'ARRAY';
+	$code->{ic} ? $strvar{$fn} =~ /$av/i : $strvar{$fn} =~ /$av/;
+      }
+      else {
+	$av = pack('C*', @$av) if ref $av eq 'ARRAY';
+
+	my $val = $strvar{$fn};
+
+	$val = pack('C*', @$val) if ref $val eq 'ARRAY';
+
+	if ($op eq 'lt') {
+	  $val lt $av;
+	}
+	elsif ($op eq 'le') {
+	  $val le $av;
+	}
+	elsif ($op eq 'ge') {
+	  $val ge $av;
+	}
+	elsif ($op eq 'gt') {
+	  $val gt $av;
+	}
+	else {
+	  $val eq $av;
+	}
+      }
+    }
+    elsif ($desc->{message_number} == $code->{mn} && defined($fn = $desc->{$fn})) {
+      my ($i, $c, $tn, $attr, $type, $invalid) = @{$desc}{map {$_ . '_' . $fn} qw(i c t a T I)};
+
+      if (ref $attr->{switch} eq 'HASH') {
+	my $t_attr = $obj->switched($desc, $v, $attr->{switch});
+
+	if (ref $t_attr eq 'HASH') {
+	  $attr = $t_attr;
+	  $tn = $attr->{type_name};
+	}
+      }
+
+      if ($type == FIT_STRING) {
+	my $str = $obj->string_value($v, $i, $c);
+
+	if ($op eq '+') {
+	  push @strstack, $str;
+	  1;
+	}
+	elsif ($op eq '-') {
+	  my $val = pop @strstack;
+	  my @v = ref $val eq 'ARRAY' ? @$val : map {ord($_)} split //, $val;
+
+	  push @v, ($invalid) x ($c - @v) if $c > @v;
+	  @{$v}[$i .. ($i + $c - 1)] = @v[0 .. ($c - 1)];
+	  1;
+	}
+	elsif ($op eq '=') {
+	  my @v = ref $av eq 'ARRAY' ? @$av : map {ord($_)} split //, $av;
+
+	  push @v, ($invalid) x ($c - @v) if $c > @v;
+	  @{$v}[$i .. ($i + $c - 1)] = @v[0 .. ($c - 1)];
+	  1;
+	}
+	else {
+	  my $arg;
+
+	  if (ref $av eq 'ARRAY') {
+	    my $i;
+
+	    for ($i = 0 ; $i < @$av ; ++$i) {
+	      $av->[$i] or last;
+	    }
+
+	    $arg = $i > 0 ? pack('C*', @{$av}[0 .. ($i - 1)]) : '';
+	  }
+	  else {
+	    $arg = $av;
+	  }
+
+	  if ($op eq 'lt') {
+	    $str lt $arg;
+	  }
+	  elsif ($op eq 'le') {
+	    $str le $arg;
+	  }
+	  elsif ($op eq 'eq') {
+	    $str eq $arg;
+	  }
+	  elsif ($op eq 'ge') {
+	    $str ge $arg;
+	  }
+	  elsif ($op eq 'gt') {
+	    $str gt $arg;
+	  }
+	  elsif ($code->{ic}) {
+	    $str =~ /$arg/i;
+	  }
+	  else {
+	    $str =~ /$arg/;
+	  }
+	}
+      }
+      elsif ($op eq '+') {
+	if ($c > 1) {
+	  push @numstack, [@{$v}[$i .. ($i + $c - 1)]];
+	}
+	else {
+	  push @numstack, $v->[$i];
+	}
+
+	1;
+      }
+      elsif ($op eq '-') {
+	my $val = pop @numstack;
+
+	@{$v}[$i .. ($i + $c - 1)] = (ref $val ne 'ARRAY' ? ($val, ($invalid) x ($c - 1)) :
+				      @$val < $c ? (@$val, ($invalid) x ($c - @$val)) :
+				      @{$val}[0 .. ($c - 1)]);
+
+	1;
+      }
+      elsif ($op !~ /^(=|lt|le|eq|ge|gt)$/) {
+	$av = pack('C*', @$av) if ref $av eq 'ARRAY';
+
+	my $b = $i;
+	my $e = $i + $c;
+
+	if ($code->{ic}) {
+	  for (; $b < $e ; ++$b) {
+	    $v->[$b] !~ /$av/i && $obj->value_cooked($tn, $attr, $invalid, $v->[$b]) !~ /$av/i
+	      and last;
+	  }
+	}
+	else {
+	  for (; $b < $e ; ++$b) {
+	    $v->[$b] !~ /$av/ && $obj->value_cooked($tn, $attr, $invalid, $v->[$b]) !~ /$av/
+	      and last;
+	  }
+	}
+
+	if ($b < $e) {
+	  0;
+	}
+	else {
+	  1;
+	}
+      }
+      else {
+	if (ref $av ne 'ARRAY') {
+	  my @av1 = ($av);
+
+	  $av = \@av1;
+	}
+
+	if ($op eq '=') {
+	  if ($c > @$av) {
+	    @{$v}[$i .. ($i + $c - 1)] = ((map {$obj->value_uncooked($tn, $attr, $invalid, $_)} @$av), ($invalid) x ($c - @$av));
+	  }
+	  else {
+	    @{$v}[$i .. ($i + $c - 1)] = map {$obj->value_uncooked($tn, $attr, $invalid, $_)} @{$av}[0 .. ($c - 1)];
+	  }
+
+	  1;
+	}
+	else {
+	  my $cmp;
+
+	  for ($j = 0 ; $j < $c && $j < @$av ; ++$j) {
+	    $cmp = $v->[$i + $j] <=> $obj->value_uncooked($tn, $attr, $invalid, $av->[$j])
+	      and last;
+	  }
+
+	  if (!$cmp && $j < $c) {
+	    do {
+	      $cmp = $v->[$i + $j++] <=> $invalid;
+	    } while (!$cmp && $j < $c);
+	  }
+
+	  if ($op eq 'lt') {
+	    $cmp < 0;
+	  }
+	  elsif ($op eq 'le') {
+	    $cmp <= 0;
+	  }
+	  elsif ($op eq 'ge') {
+	    $cmp >= 0;
+	  }
+	  elsif ($op eq 'gt') {
+	    $cmp > 0;
+	  }
+	  else {
+	    $cmp == 0;
+	  }
+	}
+      }
+    }
+    else {
+      0;
+    }
+  }
+  elsif ($code) {
+    1;
+  }
+  else {
+    0;
+  }
+}
+
+my @num64 = (0) x (FIT_BASE_TYPE_MAX + 1);
+
+$num64[FIT_FLOAT64] = $num64[FIT_SINT64] = $num64[FIT_UINT64] = $num64[FIT_UINT64Z] = 1;
+
+sub cat_cb {
+  my ($obj, $desc, $v, $o_desc, $o_cbmap) = @_;
+
+  if ($desc->{message_name} ne '') {
+    my $o_cb = $o_cbmap->{$desc->{message_name}};
+
+    ref $o_cb eq 'ARRAY' and ref $o_cb->[0] eq 'CODE' and $o_cb->[0]->($obj, $desc, $v, @$o_cb[1 .. $#$o_cb]);
+  }
+
+  $numvar{_global_message_type} = $desc->{message_number};
+  $strvar{_global_message_type} = $desc->{message_name};
+  $numvar{_local_message_type} = $desc->{local_message_type};
+
+  unless ($numvar{_stop}) {
+    &eval_expr($obj, $desc, $v, $o_desc->{code}) if defined $o_desc->{code};
+
+    unless ($numvar{_stop}) {
+      if ($numvar{_skip}) {
+	$numvar{_skip} = 0;
+      }
+      else {
+	my ($buffer, $defmsg_p) = @{$o_desc}{qw(buffer defmsg_p)};
+	my $o_endian = $desc->{endian};
+
+	$with_endian eq '' or $desc->{endian} = $with_endian < 0 ? 0 : $with_endian > 0 ? 1 : $obj->my_endian;
+
+	my $defmsg = $obj->cat_definition_message($desc);
+
+	if ($$defmsg ne '') {
+	  if ($force_proto_ver1) {
+	    $o_desc->{num64_p} = 1 if grep {$num64[$desc->{$_}]} grep {/^T_/} keys %$desc;
+	    $o_desc->{devdata_p} = 1 if $desc->{message_name} eq 'developer_data_id' || $desc->{message_name} eq 'field_description';
+	  }
+
+	  my $already = $defmsg_p->[$desc->{local_message_type}];
+
+	  if ($$defmsg ne $$already) {
+	    $defmsg_p->[$desc->{local_message_type}] = $defmsg;
+	    $$buffer .= $$defmsg;
+	  }
+
+	  my $i = length($$buffer);
+
+	  $$buffer .= $obj->pack_data_message($desc, $v);
+
+	  $i < length($$buffer) and $desc->{endian} != $obj->my_endian and ref $desc->{endian_converter} eq 'ARRAY' and
+	    $obj->endian_convert($desc->{endian_converter}, $buffer, $i);
+	}
+
+	$desc->{endian} = $o_endian;
+      }
+    }
+  }
+
+  1;
+}
+
+sub cat {
+  my ($fn, $o_desc) = @_;
+  my $obj = new Garmin::FIT;
+
+  $obj->drop_developer_data($drop_developer_data);
+  $obj->file($fn);
+
+  my $o_cbmap = $obj->data_message_callback_by_name('');
+  my $msgname;
+
+  foreach $msgname (keys %$o_cbmap) {
+    $obj->data_message_callback_by_name($msgname, \&cat_cb, $o_desc, $o_cbmap);
+  }
+
+  $obj->data_message_callback_by_name('', \&cat_cb, $o_desc, $o_cbmap);
+
+  unless ($obj->open) {
+    print STDERR $obj->error, "\n";
+    return;
+  }
+
+  my ($fsize, $proto_ver, $prof_ver, $h_extra) = $obj->fetch_header;
+
+  unless (defined $fsize) {
+    print STDERR $obj->error, "\n";
+    $obj->close;
+    return;
+  }
+
+  $o_desc->{proto_ver} = $proto_ver if !defined $o_desc->{proto_ver} || $o_desc->{proto_ver} < $proto_ver;
+  $o_desc->{prof_ver} = $prof_ver if !defined $o_desc->{prof_ver} || $o_desc->{prof_ver} < $prof_ver;
+  $o_desc->{h_extra} = $h_extra if !defined $o_desc->{h_extra};
+  1 while $obj->fetch;
+  print STDERR $obj->error, "\n" if !$obj->EOF;
+  $obj->close;
+}
+
+my $output;
+
+my %output_desc =
+  (
+   'buffer' => \$output,
+   'defmsg_p' => [],
+   );
+
+if (@ARGV) {
+  my ($res, $error);
+  my $expr_nc = $ARGV[0];
+
+  $expr_nc =~ tr/A-Z/a-z/;
+
+  if ($paren_beginning{$expr_nc} ne '') {
+    my $n;
+
+    shift @ARGV;
+    ($res, $error, $n) = &parser_parse($paren_beginning{$expr_nc}, @ARGV);
+    splice @ARGV, 0, $n;
+  }
+  else {
+    ($res, $error) = &parser_parse(undef, shift(@ARGV));
+  }
+
+  if (@$error) {
+    do {print STDERR "Parse error: ", shift(@$error), "\n"} while @$error;
+    exit 1;
+  }
+  else {
+    $output_desc{code} = $res;
+  }
+}
+
+my $output_file = @ARGV < 2 ? '-' : pop @ARGV;
+
+if ($parser_dump) {
+  &parser_dump($output_desc{code});
+  exit;
+}
+
+if (@ARGV) {
+  &cat(shift(@ARGV), \%output_desc) while @ARGV;
+}
+else {
+  &cat('-', \%output_desc);
+}
+
+my $len = length($output);
+
+if ($len > 0) {
+  my $h_extra = $output_desc{h_extra};
+
+  $force_proto_ver1 and !$output_desc{num64_p} and !$output_desc{devdata_p} and Garmin::FIT->protocol_version_major($output_desc{proto_ver}) == 2
+    and $output_desc{proto_ver} = Garmin::FIT->protocol_version_from_string('1.00');
+
+  my $p_header = Garmin::FIT->cat_header(@output_desc{qw(proto_ver prof_ver)}, $len, undef, \$h_extra);
+
+  local *O;
+
+  if (open(O, "> $output_file")) {
+    print O $$p_header;
+    print O $output;
+    print O pack('v', Garmin::FIT->crc_of_string(Garmin::FIT->crc_of_string(0, $p_header, 0, length($$p_header)), \$output, 0, $len));
+  }
+  else {
+    print STDERR "open(O, \"> $output_file\"): $!\n";
+  }
+}
+else {
+  print STDERR "nothing to output\n";
+}
+
+1;
+__END__
+
+=head1 NAME
+
+Fitsed - Stream editor for Garmin .FIT files
+
+=head1 SYNOPSIS
+
+  fitsed -show_version=1
+  fitsed [-parser_dump_indent=<number>] -parser_dump=1 <expression>
+  fitsed <expression> [<input_file1> [<input_file2> ...] [<output file>]]
+
+=head1 DESCRIPTION
+
+B<Fitsed> reads the contents of Garmin .FIT files,
+assigns specified values to specified fields of specified data messages,
+and outputs them with appropriate .FIT header and trailing CRC-16.
+
+=for html The latest version is obtained via
+
+=for html <blockquote>
+
+=for html <!--#include virtual="/cgi-perl/showfile?/cycling/pub/fitsed-[0-9]*.tar.gz"-->.
+
+=for html </blockquote>
+
+It uses a Perl class
+
+=for html <blockquote><a href="GarminFIT.shtml">
+
+C<Garmin::FIT>
+
+=for html </a></blockquote>
+
+of version 0.27 or later.
+
+=head1 EXPRESSION
+
+Each time when a data message is read,
+I<<expression>> is evaluated.
+I<<expression>> is I<<single expression>> or I<<compound expression>>.
+All syntactical keywords and operators in explanations below are case-insensitive.
+
+=head2 Single expression
+
+A single expression must be one of the following forms.
+
+=over 4
+
+=item I<<place spec>>I<<assignment or comparison>>I<<value>>
+
+=item I<<place spec>>C<+>
+
+=item I<<place spec>>C<->
+
+=item I<<a Perl expression>>
+
+=back
+
+I<<place spec>> must be one of the following forms.
+
+=over 4
+
+=item I<<message spec>>C<.>I<<field spec>>
+
+I<<message spec>> is a name or a number of a .FIT message,
+and I<<field spec>> is a name or a index of a filed of the message,
+in a global .FTI profile.
+
+=item C<_n>C<.>I<<name>>
+
+=item C<_s>C<.>I<<name>>
+
+C<_n.>I<<name>> and C<_s.>I<<name>> represent global variables named I<<name>>.
+The value of C<_n.>I<<name>> is treated as a number,
+and the value of C<_s.>I<<name>> is treated as a string.
+
+=back
+
+I<<message spec>>C<.>, C<_n.>, or C<_s.> can be omitted.
+In that case,
+the last refered one is assumed.
+
+I<<assignment or comparison>> must be one of C<=>, C<:lt:>, C<:le:>, C<:eq:>, C<:ge:>, C<:gt:>, or C<::>.
+
+=over 4
+
+=item C<=>
+
+It assigns I<<value>> to the specified place.
+It is evaluated to a true value.
+
+An array value is expressed as a comma separated list of members enclosed with open and closing braces.
+
+=item C<:lt:>
+
+=item C<:le:>
+
+=item C<:eq:>
+
+=item C<:ge:>
+
+=item C<:gt:>
+
+They stand for I<less than>, I<less than or equal to>, I<equal to>, I<greater than or equal to>, and I<greater than>, respectively.
+They compare the value of the specified place against I<<value>>.
+
+=item C<::>
+
+It matches I<<value>> as a regular expression against the value of the specified place.
+
+=back
+
+The evaluation engine has two data stack.
+One is for numeric values,
+and the other is for string values.
+
+C<+> pushs the value of I<<place spec>> to one of the stacks.
+C<-> pops a value from one of the stacks,
+and assigns the value to I<<place spec>>.
+Which of stacks is selected is determined by data type of I<<place spec>>.
+Both operations are evaluated to a true value.
+
+I<<a Perl expression>> is evaluated to a true value if and only if it is a true value as a Perl expression.
+
+=head2 Compound expression
+
+A compound expression must be one of the following form.
+
+=over 4
+
+=item C<!> I<<expression>>
+
+=item C<not> I<<expression>>
+
+Each of them evaluates to a true or false value if I<<expression>> evaluates to a false or true value, respectively.
+
+=item C<(> I<<sequence of expressions>> C<)>
+
+=item C<[> I<<sequence of expressions>> C<]>
+
+=item C<E<lt>> I<<sequence of expressions>> C<E<gt>>
+
+=item C<{> I<<sequence of expressions>> C<}>
+
+=item C<b> I<<sequence of expressions>> C<e>
+
+=item C<beg> I<<sequence of expressions>> C<end>
+
+=item C<begin> I<<sequence of expressions>> C<end>
+
+=item C<beginning> I<<sequence of expressions>> C<end>
+
+=item C<start> I<<sequence of expressions>> C<end>
+
+=item C<do> I<<sequence of expressions>> C<done>
+
+I<<sequence of expressions>> is I<<and sequence>> or I<<or sequence>>,
+and evaluated with the following rule.
+The result of the evaluation becomes the value of the compound expression.
+
+I<<and sequence>> is simply a sequence of any number of I<<expression>>'s.
+They are evaluated in order.
+Evaluation stops when an I<<expression>> evaluates to a false value,
+and the false value becomes the value of the whole sequence.
+
+If all I<<expression>>'s evaluate to true values,
+this I<<and sequence>> evaluates to a true value.
+
+=over 4
+
+=item I<<or sequence>> is a sequence of the form:
+
+I<<and sequence>> C<or> I<<sequence of expressions>>.
+
+=back
+
+First the left I<<and sequence>> is evaluated.
+If the evaluation generates a true value,
+the value becomes the value of this I<<or sequence>>.
+In this case the right I<<sequence of expression>> is not evaluated.
+
+If the evaluation generates a false value,
+the right I<<sequence of expression>> is evaluated,
+and the result becomes the value of this I<<or sequence>>.
+
+=back
+
+=head2 Special variables
+
+The following variables have special meaning.
+
+=over 4
+
+=item C<_n._stop>
+
+If this variable has a non-zero value after the expression given on the command line is evaluated,
+all succeeding evaluations of the expression and outputs of .FIT messages are skipped.
+
+=item C<_n._skip>
+
+If this variable has a non-zero value after the expression given on the command line is evaluated,
+the corresponding .FIT message is not output.
+The value is changed to 0 before the next evaluation.
+
+=item C<_n._global_message_type>
+
+assigned with the message number in a global .FIT profile of the corresponding .FIT message
+during evaluation.
+
+=item C<_s._global_message_type>
+
+assigned with the message name in a global .FIT profile of the corresponding .FIT message or an empty string
+during evaluation.
+
+=item C<_n._local_message_type>
+
+assigned with the local message number of the corresponding .FIT message
+during evaluation.
+
+=back
+
+All other global variables with names starting with C<_> (underscore) are reserved for special purpose.
+
+=head1 TYPICAL STORY
+
+If you want to modify a .FIT file (say F<originalfile.fit>),
+you can first look at the contents of the file with
+
+=for html <blockquote><a href="fitdump.shtml">
+
+C<fitdump>
+
+=for html </a></blockquote>
+
+of version 0.3 or later.
+It shows messages with message numbers and fields with field indices defined in a global .FIT profile.
+
+=over 4
+
+=item If you find the message number and the field index (say I<<M>> and I<<I>>, respectively) of data which you want to change,
+you can call C<fitsed> like
+
+C<fitsed> I<<M>>C<.>I<<I>>=I<<new value>> F<originalfile.fit> F<newfile.fit>
+
+=back
+
+where modified contens are saved to F<newfile.fit>.
+
+=head1 EXAPLES
+
+Assuming Edge 500 is mounted on the folder F</mnt/Edge500>,
+it has a file F<Settings.fit> in the folder F</mnt/Edge500/Garmin/Settings>.
+
+=over 4
+
+=item To change the value of the field C<friendly_name> of the message C<user_profile> in F<Settings.fit> to C<suto>,
+and to save the result to F</tmp/new_settings.fit>:
+
+C<fitsed> C<user_profile.friendly_name=suto> F</mnt/Edge500/Garmin/Settings/Settings.fit> F</tmp/new_settings.fit>
+
+=item To change the value of the field C<weight> of the same message to 54kg simultaneously:
+
+C<fitsed> C<B> C<user_profile.friendly_name=suto> C<weight=54kg> C<E> F</mnt/Edge500/Garmin/Settings/Settings.fit> F</tmp/new_settings.fit>
+
+=back
+
+The file F<Settings.fit> has 3 messages with message number 6.
+They seem to be bike profiles.
+The field with index 254 in a global .FIT profile of a message of this type,
+seems to be an identification number of the message in the file,
+and the field with index 10 seems to be a bike weight.
+
+=over 4
+
+=item Adding to the above changes,
+to change the value of the field with index 10 of the first message to 7.5kg:
+
+C<fitsed> C<B> C<6.254:eq:0> C<6.10=7.5kg> C<OR> C<user_profile.friendly_name=suto> C<weight=54kg> C<E> F</mnt/Edge500/Garmin/Settings/Settings.fit> F</tmp/new_settings.fit>
+
+=back
+
+=head1 AUTHOR
+
+Kiyokazu SUTO E<lt>suto@ks-and-ks.ne.jpE<gt>
+
+=head1 DISCLAIMER etc.
+
+This program is distributed with
+ABSOLUTELY NO WARRANTY.
+
+Anyone can use, modify, and re-distibute this program
+without any restriction.
+
+=head1 CHANGES
+
+=head2 0.08 --E<gt> 0.09
+
+=over 4
+
+=item C<force_proto_ver1>
+
+new option to set protocol version 1.00 unless consistency is broken.
+
+When developer data or 64bit numbers are not used but major part of protocol version is 2,
+protocol version is set to 1.00 if this option is set to true.
+
+Thanks to analysis by Stefan Heinen.
+
+=item C<cat_cb()>
+
+should care the case where there are previously defined callback functions.
+
+=back
+
+=head2 0.07 --E<gt> 0.08
+
+=over 4
+
+=item C<drop_developer_data>
+
+new option to drop developer data from output for applications which support only FIT 1.0.
+Thanks to report from Stefan Heinen.
+
+=back
+
+=head2 0.06 --E<gt> 0.07
+
+Description about notation of an array literal is added to this document.
+Thanks to report from Leandro Lind.
+
+=head2 0.05 --E<gt> 0.06
+
+=over 4
+
+=item C<cat_cb()>
+
+used an undefined variable C<$self> which should be C<$obj>.
+Thanks to report and fix of this issue by Marcus.
+
+=back
+
+=head2 0.04 --E<gt> 0.05
+
+=over 4
+
+=item C<cat_cb()>
+
+use new method C<pack_data_message> of C<Garmin::FIT>.
+
+=back
+
+=head2 0.03 --E<gt> 0.04
+
+=over 4
+
+=item C<with_endian>
+
+new option to force specified endianness (-1 =E<gt> little endian, 0 =E<gt> machine endian, and 1 =E<gt> big endian).
+
+=back
+
+=head2 0.02 --E<gt> 0.03
+
+=over 4
+
+=item C<cat()>
+
+saves extra octets in the first file header.
+
+=item I<top level>
+
+pass extra octets in the first file header to C<cat_header()>.
+
+=back
+
+=head2 0.01 --E<gt> 0.02
+
+=over 4
+
+=item C<cat_cb()>
+
+special variables are introduced.
+Backward compatibility is broken.
+
+=back
+
+=cut
