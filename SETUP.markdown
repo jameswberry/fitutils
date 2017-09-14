@@ -2,7 +2,7 @@
 
 ## **PERL**
 
-Make sure you are in your home directory.
+### Make sure you are in your home directory.
 ```bash
 $ cd ~/
 ```
@@ -13,9 +13,13 @@ $ \curl -L https://install.perlbrew.pl | bash
 $ perlbrew init
 ```
 
-Add the following line to your ~/.bash_profile file
+### Add the following line to your `~/.bashrc` or `~/.bash_profile` file
 ```bash
-$ source ~/perl5/perlbrew/etc/bashrc
+source ~/perl5/perlbrew/etc/bashrc
+```
+
+### Update your shell
+```bash
 $ source ~/perl5/perlbrew/etc/bashrc  # Just in case any environment settings need updating
 ```
 
@@ -77,13 +81,13 @@ $ ln -s vendor/Garmin-FIT/fit2gpx.pl bin/fit2gpx
 $ cd -
 ```
 
-### Get FitToTCX - Extracts to ./bin
+### Get FitToTCX - Extracts to `./bin`
 ```bash
 $ \curl -L https://pub.ks-and-ks.ne.jp/cycling/pub/fit2tcx-0.11.tar.gz > vendor/.
 $ tar -xvf vendor/fitsed-0.09.tar.gz
 ```
 
-### Get FitSED - Extracts to ./bin
+### Get FitSED - Extracts to `./bin`
 ```bash
 $ \curl -L https://pub.ks-and-ks.ne.jp/cycling/pub/fitsed-0.09.tar.gz > vendor/.
 $ tar -xvf vendor/fitsed-0.09.tar.gz
