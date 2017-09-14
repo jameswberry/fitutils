@@ -1,7 +1,5 @@
 .DS_Store
 
-*.tmproj
-
 node_modules/
 
-tmp/
+.tmproj

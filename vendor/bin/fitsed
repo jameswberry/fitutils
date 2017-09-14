@@ -985,7 +985,7 @@ C<fitsed> I<<M>>C<.>I<<I>>=I<<new value>> F<originalfile.fit> F<newfile.fit>
 
 where modified contens are saved to F<newfile.fit>.
 
-=head1 EXAMPLES
+=head1 EXAPLES
 
 Assuming Edge 500 is mounted on the folder F</mnt/Edge500>,
 it has a file F<Settings.fit> in the folder F</mnt/Edge500/Garmin/Settings>.
