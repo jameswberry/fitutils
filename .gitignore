@@ -3,5 +3,5 @@
 *.tmproj
 
 node_modules/
-
 tmp/
+vendor/Garmin-FIT/
